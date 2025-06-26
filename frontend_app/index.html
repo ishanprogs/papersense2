@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Q&A</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Lora:wght@500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <svg class="asterisk" width="30" height="30" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M50 0 L58.66 36.13 L95.11 30.9 L68.18 58.66 L90.45 90.45 L58.66 68.18 L50 100 L41.34 68.18 L9.55 90.45 L31.82 58.66 L4.89 30.9 L41.34 36.13 Z" fill="#E8795F"/>
+            </svg>
+            <h1>Search. Ask. Understand your documents.</h1>
+        </header>
+
+        <!-- Upload Section -->
+        <div class="upload-section">
+            <h2>Upload New Document</h2>
+            <!-- Ensure your input ID matches what script.js uses -->
+            <input type="file" id="file-upload-input" accept=".pdf,.json,.txt,.csv">
+            <button id="upload-button">Upload & Process Document</button>
+            <div id="upload-status" class="upload-status"></div>
+        </div>
+        <!-- End Upload Section -->
+
+        <!-- Query Type Selector - UPDATED -->
+        <div class="query-type-selector">
+            <h3>Query Target:</h3>
+            <label><input type="radio" name="queryMode" value="document_search_generic" checked> Documents (PDF/JSON/CSV)</label>
+            <label><input type="radio" name="queryMode" value="cosmosdb_query"> NoSQL DB (CosmicWorks)</label>
+            <label><input type="radio" name="queryMode" value="hybrid_all"> Both (Experimental)</label>
+        </div>
+
+
+        <div class="chat-content-wrapper">
+            <div class="chat-window">
+                <div id="chat-log" class="chat-log">
+                     <div class="message assistant">
+                        <div class="message-content">
+                           Upload a document or select a query target to ask about AdventureWorks data. How can I help?
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-wrapper">
+                <div class="input-area">
+                    <textarea id="user-input" placeholder="Ask about your documents or AdventureWorks data..." rows="1"></textarea>
+                    <button id="send-button" aria-label="Send message">
+                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 4L10.59 5.41L16.17 11H4V13H16.17L10.59 18.59L12 20L20 12L12 4Z" fill="currentColor"/>
+                         </svg>
+                    </button>
+                </div>
+                <div id="loading" class="loading hidden">
+                    <span>Thinking...</span>
+                    <div class="spinner"></div>
+                </div>
+            </div>
+         </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

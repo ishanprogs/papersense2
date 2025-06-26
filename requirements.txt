@@ -1,0 +1,12 @@
+azure-core
+azure-functions
+azure-storage-blob
+azure-search-documents
+azure-ai-documentintelligence>=1.0.0
+azure-identity
+openai>=1.0.0
+python-dotenv
+langchain 
+PyMuPDF
+pandas
+azure-cosmos
