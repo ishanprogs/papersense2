@@ -28,13 +28,13 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 import azure.functions as func
 
 # Configuration
-SEARCH_ENDPOINT = os.environ["AZURE_SEARCH_ENDPOINT"]
-SEARCH_KEY = os.environ["AZURE_SEARCH_KEY"]
+SEARCH_ENDPOINT = os.environ.get("AZURE_SEARCH_ENDPOINT")
+SEARCH_KEY = os.environ.get("AZURE_SEARCH_KEY")
 SEARCH_INDEX_NAME = os.environ.get("AZURE_SEARCH_INDEX_NAME", "pdf-index")
 
-OPENAI_ENDPOINT = os.environ["AZURE_OPENAI_ENDPOINT"]
-OPENAI_KEY = os.environ["AZURE_OPENAI_KEY"]
-OPENAI_EMBEDDING_DEPLOYMENT = os.environ["AZURE_OPENAI_EMBEDDING_DEPLOYMENT"]
+OPENAI_ENDPOINT = os.environ.get("AZURE_OPENAI_ENDPOINT")
+OPENAI_KEY = os.environ.get("AZURE_OPENAI_KEY")
+OPENAI_EMBEDDING_DEPLOYMENT = os.environ.get("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")
 OPENAI_API_VERSION = os.environ.get("AZURE_OPENAI_API_VERSION", "2023-12-01-preview")
 VECTOR_DIMENSION = 3072
 
@@ -516,6 +516,17 @@ def process_csv_content(file_bytes, filename):
         return f"Error processing CSV file: {filename}"
 
 def main(myblob: func.InputStream) -> None:
+    # --- VALIDATION BLOCK AT THE START OF main ---
+    required_env_vars = [
+        "AZURE_SEARCH_ENDPOINT", "AZURE_SEARCH_KEY", "AZURE_OPENAI_ENDPOINT",
+        "AZURE_OPENAI_KEY", "AZURE_OPENAI_EMBEDDING_DEPLOYMENT"
+    ]
+    missing_vars = [var for var in required_env_vars if not os.environ.get(var)]
+    if missing_vars:
+        error_message = f"Missing required environment variables: {', '.join(missing_vars)}. Aborting execution."
+        logging.critical(error_message)
+        return  # Stop execution if config is missing
+    
     logging.info(f"Python Blob trigger function `ProcessFile` processed blob: {myblob.name}")
     blob_filename_with_path = myblob.name
     blob_filename = os.path.basename(blob_filename_with_path)
