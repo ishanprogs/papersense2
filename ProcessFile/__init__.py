@@ -12,7 +12,6 @@ import pandas as pd
 
 # Document Intelligence Imports
 from azure.ai.documentintelligence import DocumentIntelligenceClient
-from azure.ai.documentintelligence.models import AnalyzeResult
 from azure.core.credentials import AzureKeyCredential as AzureCoreKeyCredential
 
 # Azure Search, OpenAI, Langchain, Functions imports
@@ -314,8 +313,8 @@ def clean_text(text):
     # Remove excessive whitespace and normalize
     text = re.sub(r'\s+', ' ', text.strip())
     
-    # Remove special characters that might interfere with embedding
-    text = re.sub(r'[^\w\s\.\,\;\:\!\?\-\(\)\[\]\{\}\"\'\/\@\#\$\%\&\*\+\=\<\>]', ' ', text)
+    # FIXED: Properly escaped regex pattern
+    text = re.sub(r'[^\w\s\.,;:!?\-\(\)\[\]\{\}"\'/@#$%&*+=<>]', ' ', text)
     
     return text
 
@@ -417,7 +416,7 @@ def process_csv_content(file_bytes, filename):
         csv_content = file_bytes.decode('utf-8')
         csv_reader = csv.reader(csv_content.splitlines())
         
-        # Convert to pandas DataFrame for easier processing
+        # Convert to list for processing
         rows = list(csv_reader)
         if not rows:
             return ""
@@ -438,8 +437,14 @@ def process_csv_content(file_bytes, filename):
         
         # Add column information
         content_parts.append("=== COLUMN INFORMATION ===")
-        for i, header in enumerate(headers):
-            content_parts.append(f"Column {i+1}: {header}")
+        # Ensure headers is a list of strings
+        if all(isinstance(h, str) for h in headers):
+            for i, header in enumerate(headers):
+                content_parts.append(f"Column {i+1}: {header}")
+        else:
+            logging.warning(f"CSV header row is not a list of strings in {filename}: {headers}")
+            for i, header in enumerate(headers):
+                content_parts.append(f"Column {i+1}: {str(header)}")
         content_parts.append("")
         
         # Add structured data in multiple formats for better searchability
@@ -510,7 +515,7 @@ def process_csv_content(file_bytes, filename):
         logging.error(f"Error processing CSV content for {filename}: {str(e)}")
         return f"Error processing CSV file: {filename}"
 
-def main(myblob: func.InputStream):
+def main(myblob: func.InputStream) -> None:
     logging.info(f"Python Blob trigger function `ProcessFile` processed blob: {myblob.name}")
     blob_filename_with_path = myblob.name
     blob_filename = os.path.basename(blob_filename_with_path)

@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- VERY IMPORTANT: Replace with your deployed Function URLs ---
     const askFunctionApiUrl = 'https://pdf-rag-function-g7cfc6hcf7brekh4.eastus2-01.azurewebsites.net/api/AskQuestion?';
-    const uploadFunctionApiUrl = 'https://pdf-rag-function-g7cfc6hcf7brekh4.eastus2-01.azurewebsites.net/api/upload?code=h-eWHQuMhtInxfrmeeOGi_RzvtaQMVwVyrvQeVT26KfqAzFuHX5loQ==';
+    const uploadFunctionApiUrl = 'https://pdf-rag-function-g7cfc6hcf7brekh4.eastus2-01.azurewebsites.net/api/upload?code=zmP2BxYYgyhv94C-nqpDTss8stxTEpMhRKxsS6DYq91PAzFu7wZQIg==';
 
     // Auto-resize textarea based on content
     userInput.addEventListener('input', () => {
