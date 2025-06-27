@@ -1,6 +1,6 @@
 azure-core
 azure-functions
-azure-storage-blob
+azure-storage-blob>=12.0.0
 azure-search-documents
 azure-ai-documentintelligence>=1.0.0
 azure-identity
