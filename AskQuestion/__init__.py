@@ -953,98 +953,81 @@ def call_query_cosmos_db_function(query):
 def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('AskQuestion function (PDF/CSV/JSON RAG + CosmosDB NLQ) processing request.')
     
-    # Initial validation
-    if not search_client or not openai_client:
-        return func.HttpResponse(
-            json.dumps({"error": "Core services not initialized."}),
-            status_code=503,
-            mimetype="application/json"
-        )
-
-    try:
-        req_body = req.get_json()
-        user_question = req_body.get('question')
-        query_mode_hint = req_body.get('query_mode', 'auto_detect')
-    except ValueError:
-        return func.HttpResponse(
-            json.dumps({"error": "Invalid JSON"}),
-            status_code=400,
-            mimetype="application/json"
-        )
-
-    if not user_question:
-        return func.HttpResponse(
-            json.dumps({"error": "Question missing"}),
-            status_code=400,
-            mimetype="application/json"
-        )
-
     try:
         document_rag_context_str = ""
         cosmos_query_results_str = ""
         sources = set()
         final_answer = "I was unable to find an answer to your question using the available information."
-        
-        # MODIFICATION STARTS HERE
+        # This will be loaded only if/when needed to save resources.
+        cosmos_schema = None
+
+        # --- FINAL, ROBUST STRATEGY SELECTION ---
+        logging.info(f"Received query_mode_hint from frontend: '{query_mode_hint}'")
+
         if query_mode_hint == 'document_search_generic':
             effective_strategy = 'document_search_generic'
             response_metadata = {
                 "strategy_used": effective_strategy,
-                "llm_detection_reasoning": "User selected 'Documents' query target."
+                "llm_detection_reasoning": "User explicitly selected 'Documents' query target."
             }
         elif query_mode_hint == 'cosmosdb_query':
             effective_strategy = 'cosmosdb_query'
             response_metadata = {
                 "strategy_used": effective_strategy,
-                "llm_detection_reasoning": "User selected 'NoSQL DB' query target."
+                "llm_detection_reasoning": "User explicitly selected 'NoSQL DB' query target."
             }
-        else:  # This will handle 'hybrid_all' and 'auto_detect'
-            cosmos_schema_for_detection = discover_database_schema()
+        else:  # This handles 'hybrid_all' or 'auto_detect'
+            logging.info("User selected 'Both' or no specific mode. Using LLM to determine strategy.")
+            # Load schema here because the LLM needs it to make an informed decision
+            cosmos_schema = discover_database_schema()
             strategy_decision = llm_determine_query_strategy(user_question)
             effective_strategy = strategy_decision.get("strategy", "document_search_generic")
             response_metadata = {
                 "strategy_used": effective_strategy,
                 "llm_detection_reasoning": strategy_decision.get("reasoning")
             }
-        
-        logging.info(f"Effective strategy: {effective_strategy} (Hint from frontend: {query_mode_hint})")
-        # MODIFICATION ENDS HERE
 
-        # Document Search Path
+        logging.info(f"Final effective strategy: {effective_strategy}")
+        # --- END OF STRATEGY SELECTION ---
+
+        # --- DOCUMENT SEARCH PATH ---
         if effective_strategy.startswith("document_search"):
             try:
                 enhanced_terms, matched_categories, confidence_score = enhance_query_with_comprehensive_context(user_question)
                 search_results = perform_multi_strategy_search(user_question, enhanced_terms, matched_categories)
-                
+
                 if search_results:
                     primary_file_type = detect_primary_file_type(search_results)
                     response_metadata["detected_document_source_type"] = primary_file_type
 
-                    if primary_file_type == 'csv' and effective_strategy == "document_search_specialized_csv":
+                    if primary_file_type == 'csv':
                         chunks = intelligent_chunk_prioritization_for_csv(search_results, user_question)
                         document_rag_context_str, doc_sources = build_comprehensive_context_for_csv(chunks)
-                    elif primary_file_type in ['pdf', 'json'] and effective_strategy == "document_search_specialized_form":
-                        chunks = intelligent_chunk_prioritization_for_forms(search_results, matched_categories)
-                        document_rag_context_str, doc_sources, _ = build_comprehensive_context_for_forms(chunks)
                     else:
                         chunks = intelligent_chunk_prioritization_for_forms(search_results, matched_categories)
-                        document_rag_context_str, doc_sources, _ = build_comprehensive_context_for_forms(chunks, max_chunks=15)
-                    
+                        document_rag_context_str, doc_sources, _ = build_comprehensive_context_for_forms(chunks)
+
                     sources.update(doc_sources)
                 else:
                     logging.info("No relevant document search results found.")
                     document_rag_context_str = ""
             except Exception as e_doc:
-                logging.error(f"Error in document search: {str(e_doc)}", exc_info=True)
+                logging.error(f"Error in document search path: {str(e_doc)}", exc_info=True)
                 document_rag_context_str = "An error occurred while searching documents."
 
-        # Cosmos DB Query Path
+        # --- COSMOS DB QUERY PATH (NOW CORRECTLY HANDLED) ---
         if effective_strategy == "cosmosdb_query" or effective_strategy == "hybrid_all":
-            if not QUERY_COSMOSDB_FUNCTION_URL or not COSMOS_ENDPOINT_FOR_PROMPT:
+            if not QUERY_COSMOSDB_FUNCTION_URL:
                 cosmos_query_results_str = "Cosmos DB querying is not configured for this system."
             else:
                 try:
-                    generated_query = convert_nl_to_cosmos_query(user_question, cosmos_schema_for_detection)
+                    # **Deferred Loading**: Load the schema only if it hasn't been loaded yet.
+                    if cosmos_schema is None:
+                        logging.info("Loading Cosmos DB schema for direct query generation...")
+                        cosmos_schema = discover_database_schema()
+
+                    generated_query = convert_nl_to_cosmos_query(user_question, cosmos_schema)
+
                     if generated_query:
                         execution_response = call_query_cosmos_db_function(generated_query)
                         if execution_response and execution_response.get("success"):
@@ -1057,55 +1040,37 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                                     cosmos_query_results_str += f"...and {len(cosmos_data)-5} more items.\n"
                                 sources.add("AdventureWorks Data (Cosmos DB)")
                             else:
-                                cosmos_query_results_str = f"The query returned no data: {generated_query}"
+                                cosmos_query_results_str = f"The query '{generated_query}' returned no data from the database."
                         else:
                             error_msg = execution_response.get('error', 'Unknown error') if execution_response else 'No response'
                             cosmos_query_results_str = f"Query execution error: {error_msg}"
                     else:
                         cosmos_query_results_str = "Could not generate a valid database query for your question."
                 except Exception as e_cosmos:
-                    logging.error(f"Error in Cosmos DB query: {str(e_cosmos)}", exc_info=True)
+                    logging.error(f"Error in Cosmos DB query path: {str(e_cosmos)}", exc_info=True)
                     cosmos_query_results_str = f"Error processing database query: {str(e_cosmos)}"
 
-        # Generate Final Answer
+        # --- FINAL ANSWER GENERATION ---
         final_context = ""
         if document_rag_context_str and not document_rag_context_str.startswith("An error"):
             final_context += f"DOCUMENT CONTEXT:\n{document_rag_context_str}\n\n"
         if cosmos_query_results_str and not cosmos_query_results_str.startswith(("Error", "Could not", "Failed")):
             final_context += f"DATABASE CONTEXT:\n{cosmos_query_results_str}\n\n"
 
-        if not final_context:
+        if not final_context.strip():
+            final_answer = "I could not find relevant information in the selected source to answer your question."
             if effective_strategy == "cosmosdb_query" and cosmos_query_results_str:
                 final_answer = cosmos_query_results_str
-            elif effective_strategy.startswith("document_search") and document_rag_context_str:
-                final_answer = document_rag_context_str
-            else:
-                final_answer = "I could not find relevant information to answer your question."
         else:
             try:
-                # Prepare the appropriate prompt based on the context type
-                if effective_strategy == "document_search_specialized_form":
-                    system_prompt = create_form_system_prompt()
-                    messages = [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"DOCUMENT CONTEXT:\n{final_context}\n\nQUESTION: {user_question}"}
-                    ]
-                elif effective_strategy == "document_search_specialized_csv":
+                system_prompt = create_form_system_prompt()
+                if effective_strategy == "document_search_specialized_csv":
                     system_prompt = create_csv_system_prompt()
-                    messages = [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"CSV DATA:\n{final_context}\n\nQUESTION: {user_question}"}
-                    ]
-                else:
-                    messages = [{
-                        "role": "system",
-                        "content": """You are an AI assistant. Answer the question based ONLY on the provided context.
-If the context doesn't contain enough information to answer the question, say so.
-Do not use external knowledge or make assumptions."""
-                    }, {
-                        "role": "user",
-                        "content": f"CONTEXT:\n{final_context}\n\nQUESTION: {user_question}"
-                    }]
+
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"CONTEXT:\n{final_context}\n\nQUESTION: {user_question}"}
+                ]
 
                 response = openai_client.chat.completions.create(
                     model=OPENAI_CHAT_DEPLOYMENT,
@@ -1113,6 +1078,34 @@ Do not use external knowledge or make assumptions."""
                     temperature=0.0,
                     max_tokens=2000,
                     top_p=0.1
+                )
+                final_answer = response.choices[0].message.content.strip()
+            except Exception as e_answer:
+                logging.error(f"Error generating final answer: {str(e_answer)}", exc_info=True)
+                final_answer = "Sorry, I encountered an error while formulating the answer."
+                response_metadata["error"] = str(e_answer)
+
+        return func.HttpResponse(
+            json.dumps({
+                "answer": final_answer,
+                "sources": sorted(list(sources)),
+                "metadata": response_metadata
+            }, indent=2),
+            mimetype="application/json"
+        )
+
+    except Exception as e:
+        logging.critical(f"Critical error in AskQuestion: {str(e)}", exc_info=True)
+        return func.HttpResponse(
+            json.dumps({
+                "error": "An unexpected error occurred.",
+                "answer": "I'm sorry, I encountered an error while processing your question.",
+                "sources": [],
+                "metadata": {"strategy_used": "error"}
+            }),
+            status_code=500,
+            mimetype="application/json"
+        )
                 )
                 final_answer = response.choices[0].message.content.strip()
             except Exception as e_answer:
