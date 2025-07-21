@@ -1106,31 +1106,3 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             status_code=500,
             mimetype="application/json"
         )
-                )
-                final_answer = response.choices[0].message.content.strip()
-            except Exception as e_answer:
-                logging.error(f"Error generating final answer: {str(e_answer)}", exc_info=True)
-                final_answer = "Sorry, I encountered an error while formulating the answer."
-                response_metadata["error"] = str(e_answer)
-
-        return func.HttpResponse(
-            json.dumps({
-                "answer": final_answer,
-                "sources": sorted(list(sources)),
-                "metadata": response_metadata
-            }, indent=2),
-            mimetype="application/json"
-        )
-
-    except Exception as e:
-        logging.critical(f"Critical error in AskQuestion: {str(e)}", exc_info=True)
-        return func.HttpResponse(
-            json.dumps({
-                "error": "An unexpected error occurred.",
-                "answer": "I'm sorry, I encountered an error while processing your question.",
-                "sources": [],
-                "metadata": {"strategy_used": "error"}
-            }),
-            status_code=500,
-            mimetype="application/json"
-        )
