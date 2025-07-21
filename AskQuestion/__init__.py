@@ -980,22 +980,35 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         )
 
     try:
-        # Initialize response variables
         document_rag_context_str = ""
         cosmos_query_results_str = ""
         sources = set()
         final_answer = "I was unable to find an answer to your question using the available information."
         
-        # Determine Query Strategy
-        cosmos_schema_for_detection = discover_database_schema()
-        strategy_decision = llm_determine_query_strategy(user_question)
-        effective_strategy = strategy_decision.get("strategy", "document_search_generic")
-        response_metadata = {
-            "strategy_used": effective_strategy,
-            "llm_detection_reasoning": strategy_decision.get("reasoning")
-        }
+        # MODIFICATION STARTS HERE
+        if query_mode_hint == 'document_search_generic':
+            effective_strategy = 'document_search_generic'
+            response_metadata = {
+                "strategy_used": effective_strategy,
+                "llm_detection_reasoning": "User selected 'Documents' query target."
+            }
+        elif query_mode_hint == 'cosmosdb_query':
+            effective_strategy = 'cosmosdb_query'
+            response_metadata = {
+                "strategy_used": effective_strategy,
+                "llm_detection_reasoning": "User selected 'NoSQL DB' query target."
+            }
+        else:  # This will handle 'hybrid_all' and 'auto_detect'
+            cosmos_schema_for_detection = discover_database_schema()
+            strategy_decision = llm_determine_query_strategy(user_question)
+            effective_strategy = strategy_decision.get("strategy", "document_search_generic")
+            response_metadata = {
+                "strategy_used": effective_strategy,
+                "llm_detection_reasoning": strategy_decision.get("reasoning")
+            }
         
-        logging.info(f"Determined strategy: {effective_strategy} (Hint from frontend: {query_mode_hint})")
+        logging.info(f"Effective strategy: {effective_strategy} (Hint from frontend: {query_mode_hint})")
+        # MODIFICATION ENDS HERE
 
         # Document Search Path
         if effective_strategy.startswith("document_search"):
